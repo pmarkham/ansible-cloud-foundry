@@ -51,18 +51,18 @@ options:
     domain:
         description:
             - Domain name
-            - Will prepend login.system and api.system to this.
-            - Use login_url and api_url if this isn't suitable.
+            - Will prepend U(login.system) and U(api.system) to this.
+            - Use I(login_url) and I(api_url) if this isn't suitable.
         required: false
     login_url:
         description:
             - URL of login end point
-            - Not require if domain is specified
+            - Not require if I(domain) is specified
         required: false
     api_url:
         description:
             - URL of api end point
-            - Not require if domain is specified
+            - Not require if I(domain) is specified
         required: false
     protocol:
         description:
@@ -100,10 +100,14 @@ EXAMPLES = '''
 
 class CF_Org(object):
     def __init__(self, module):
-        self.changed      = False
         self.exists       = False
-        self.msg          = []
         self.http_headers = {}
+
+        self.result = {
+            'changed': False,
+            'diff': {},
+            'msg': [],
+        }
 
         self.module         = module
         self.name           = self.module.params['name']
@@ -124,7 +128,7 @@ class CF_Org(object):
         self.force          = self.module.params['force']
 
         if self.module.check_mode:
-            self.msg.append('*** Running in check mode ***')
+            self.result['msg'].append('*** Running in check mode ***')
 
         self.login()
         self.get_org()
@@ -132,7 +136,7 @@ class CF_Org(object):
     def present(self):
         self.get_quota_guid()
         if self.exists:
-            self.msg.append("Org '%s' already exists" % self.name)
+            self.result['msg'].append("Org '%s' already exists" % self.name)
             if self.org_quota_guid != self.quota_guid:
                 self.update_quota()
         else:
@@ -142,7 +146,7 @@ class CF_Org(object):
         if self.exists:
             self.delete_org()
         else:
-            self.msg.append("Org '%s' doesn't exist" % self.name)
+            self.result['msg'].append("Org '%s' doesn't exist" % self.name)
 
     def login(self):
         action = 'Login'
@@ -192,37 +196,43 @@ class CF_Org(object):
  
     def create_org(self):
         action = "Create org '%s'" % self.name
-        self.changed = True
+        self.result['changed'] = True
         if not self.module.check_mode:
             parms = {'name': self.name, 'quota_definition_guid': self.quota_guid}
             url = '%s/v2/organizations' % (self.api_url)
             response, info = fetch_url(self.module, url, data=json.dumps(parms), headers=self.http_headers, method='POST')
             if info['status'] != 201:
                 self.api_error(action, info)
-        self.msg.append(action)
+        self.result['diff']['before'] = '<absent>\n'
+        self.result['diff']['after']  = 'org %s quota %s\n' % (self.name, self.quota_guid)
+        self.result['msg'].append(action)
 
     def delete_org(self):
         if self.name == 'system' and not self.force:
             self.module.fail_json(msg="Can't delete org 'system'")
         action = "Delete org '%s'" % self.name
-        self.changed = True
+        self.result['changed'] = True
         if not self.module.check_mode:
             url = '%s/v2/organizations/%s?async=false&recursive=true' % (self.api_url, self.org_guid)
             response, info = fetch_url(self.module, url, headers=self.http_headers, method='DELETE')
             if info['status'] != 204:
                 self.api_error(action, info)
-        self.msg.append(action)
+        self.result['diff']['before'] = 'org %s\n' % self.name
+        self.result['diff']['after']  = '<absent>\n'
+        self.result['msg'].append(action)
 
     def update_quota(self):
         action = "Update quota for org '%s' to '%s'" % (self.name, self.quota)
-        self.changed = True
+        self.result['changed'] = True
         if not self.module.check_mode:
             parms = {'quota_definition_guid': self.quota_guid}
             url = '%s/v2/organizations/%s' % (self.api_url, self.org_guid)
             response, info = fetch_url(self.module, url, data=json.dumps(parms), headers=self.http_headers, method='PUT')
             if info['status'] != 201:
                 self.api_error(action, info)
-        self.msg.append(action)
+        self.result['diff']['before'] = 'org %s quota %s\n' % (self.name, self.org_quota_guid)
+        self.result['diff']['after']  = 'org %s quota %s\n' % (self.name, self.quota_guid)
+        self.result['msg'].append(action)
 
     def api_error(self, action, info):
         if 'body' in info:
@@ -241,7 +251,7 @@ def main():
             state           = dict(default='present', type='str', choices=['present', 'absent']),
             name            = dict(required=True, type='str', aliases=['id']),
             admin_user      = dict(required=True, type='str'),
-            admin_password  = dict(required=True, type='str'),
+            admin_password  = dict(required=True, type='str', no_log=True),
             domain          = dict(type='str'),
             protocol        = dict(default='https', type='str', choices=['http', 'https']),
             login_url       = dict(type='str'),
@@ -273,7 +283,7 @@ def main():
     else:
         module.fail_json(msg='Invalid state: %s' % state)
 
-    module.exit_json(changed=cf.changed, msg=', '.join(cf.msg))
+    module.exit_json(**cf.result)
 
 # Ansible boilerplate code
 from ansible.module_utils.basic import *
