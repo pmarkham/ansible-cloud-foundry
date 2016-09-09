@@ -89,16 +89,16 @@ options:
 
 EXAMPLES = '''
 # Create org with default quota
-- cf_org: state=present name=test admin_user=admin admin_password=abc123
+- cf_org: state=present name=test admin_user=admin admin_password=abc123 domain=example.com
 
 # Create org specifying quota/change quota of existing org
-- cf_org: state=present name=test admin_user=admin admin_password=abc123 quota=runaway
+- cf_org: state=present name=test admin_user=admin admin_password=abc123 quota=runaway domain=example.com
 
 # Delete org
-- cf_org: state=absent name=test admin_user=admin admin_password=abc123
+- cf_org: state=absent name=test admin_user=admin admin_password=abc123 domain=example.com
 '''
 
-class CF_Auth(object):
+class CF_Org(object):
     def __init__(self, module):
         self.changed      = False
         self.exists       = False
@@ -263,7 +263,7 @@ def main():
         supports_check_mode = True,
     )    
 
-    cf = CF_Auth(module)
+    cf = CF_Org(module)
 
     state = module.params['state']
     if state == 'present':
