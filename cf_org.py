@@ -1,5 +1,18 @@
 #!/usr/bin/python
 
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+#  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 import sys
 import os
 import json
@@ -7,10 +20,82 @@ import urllib
 
 DOCUMENTATION = '''
 ---
+module: cf_org
+short_description: Manage Cloud Foundry Orgs
+description:
+    - Manage Cloud Foundry Orgs
+author: "Paul Markham, @pmarkham"
+options:
+    state:
+        description:
+            - Desired state of the org
+        required: false
+        default: present
+        choices: [present, absent]
+    name:
+        description:
+            - Name of the org
+        required: true
+        default: null
+        aliases: [id]
+    admin_user:
+        description:
+            - Administrator username/email
+        required: true
+        default: null
+    admin_password:
+        description:
+            - Administrator password
+        required: true
+        default: null
+    domain:
+        description:
+            - Domain name
+            - Will prepend login.system and api.system to this.
+            - Use login_url and api_url if this isn't suitable.
+        required: false
+    login_url:
+        description:
+            - URL of login end point
+            - Not require if domain is specified
+        required: false
+    api_url:
+        description:
+            - URL of api end point
+            - Not require if domain is specified
+        required: false
+    protocol:
+        description:
+            - Protocol to use for API calls
+        required: false
+        default: https
+        choices: [https, http]
+    quota:
+        description:
+            - Name of quota to associate with the org
+        required: false
+        default: default
+    validate_certs:
+        description:
+            - Validate SSL certs. Validation will fail with self-signed certificates.
+        required: false
+        default: false
+    force:
+        description:
+            - Force deletion of system org
+        required: false
+        default: false
 '''
 
 EXAMPLES = '''
-#
+# Create org with default quota
+- cf_org: state=present name=test admin_user=admin admin_password=abc123
+
+# Create org specifying quota/change quota of existing org
+- cf_org: state=present name=test admin_user=admin admin_password=abc123 quota=runaway
+
+# Delete org
+- cf_org: state=absent name=test admin_user=admin admin_password=abc123
 '''
 
 class CF_Auth(object):
@@ -153,7 +238,7 @@ class CF_Auth(object):
 def main():
     module = AnsibleModule(
         argument_spec       = dict(
-            state           = dict(required=True, type='str', choices=['present', 'absent']),
+            state           = dict(default='present', type='str', choices=['present', 'absent']),
             name            = dict(required=True, type='str', aliases=['id']),
             admin_user      = dict(required=True, type='str'),
             admin_password  = dict(required=True, type='str'),
