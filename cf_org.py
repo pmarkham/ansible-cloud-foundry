@@ -105,7 +105,7 @@ class CF_Org(object):
 
         self.result = {
             'changed': False,
-            'diff': {},
+            'diff': [],
             'msg': [],
         }
 
@@ -128,7 +128,7 @@ class CF_Org(object):
         self.force          = self.module.params['force']
 
         if self.module.check_mode:
-            self.result['msg'].append('*** Running in check mode ***')
+            self.msg('*** Running in check mode ***')
 
         self.login()
         self.get_org()
@@ -136,7 +136,7 @@ class CF_Org(object):
     def present(self):
         self.get_quota_guid()
         if self.exists:
-            self.result['msg'].append("Org '%s' already exists" % self.name)
+            self.msg("Org '%s' already exists" % self.name)
             if self.org_quota_guid != self.quota_guid:
                 self.update_quota()
         else:
@@ -146,7 +146,7 @@ class CF_Org(object):
         if self.exists:
             self.delete_org()
         else:
-            self.result['msg'].append("Org '%s' doesn't exist" % self.name)
+            self.msg("Org '%s' doesn't exist" % self.name)
 
     def login(self):
         action = 'Login'
@@ -179,7 +179,7 @@ class CF_Org(object):
             self.api_error(action, info)
 
     def get_quota_guid(self):
-        action = "Get quote guid '%s'" % self.quota
+        action = "Get quota guid '%s'" % self.quota
         url = '%s/v2/quota_definitions?q=%s' % (self.api_url, urllib.quote('name:%s' % self.quota))
         response, info = fetch_url(self.module, url, headers=self.http_headers, method='GET')
         if info['status'] == 200:
@@ -203,9 +203,8 @@ class CF_Org(object):
             response, info = fetch_url(self.module, url, data=json.dumps(parms), headers=self.http_headers, method='POST')
             if info['status'] != 201:
                 self.api_error(action, info)
-        self.result['diff']['before'] = '<absent>\n'
-        self.result['diff']['after']  = 'org %s quota %s\n' % (self.name, self.quota_guid)
-        self.result['msg'].append(action)
+        self.diff('<absent>', 'org %s quota %s' % (self.name, self.quota_guid))
+        self.msg(action)
 
     def delete_org(self):
         if self.name == 'system' and not self.force:
@@ -217,9 +216,8 @@ class CF_Org(object):
             response, info = fetch_url(self.module, url, headers=self.http_headers, method='DELETE')
             if info['status'] != 204:
                 self.api_error(action, info)
-        self.result['diff']['before'] = 'org %s\n' % self.name
-        self.result['diff']['after']  = '<absent>\n'
-        self.result['msg'].append(action)
+        self.diff('org %s' % self.name, '<absent>')
+        self.msg(action)
 
     def update_quota(self):
         action = "Update quota for org '%s' to '%s'" % (self.name, self.quota)
@@ -230,9 +228,8 @@ class CF_Org(object):
             response, info = fetch_url(self.module, url, data=json.dumps(parms), headers=self.http_headers, method='PUT')
             if info['status'] != 201:
                 self.api_error(action, info)
-        self.result['diff']['before'] = 'org %s quota %s\n' % (self.name, self.org_quota_guid)
-        self.result['diff']['after']  = 'org %s quota %s\n' % (self.name, self.quota_guid)
-        self.result['msg'].append(action)
+        self.diff('org %s quota %s' % (self.name, self.org_quota_guid), 'org %s quota %s' % (self.name, self.quota_guid))
+        self.msg(action)
 
     def api_error(self, action, info):
         if 'body' in info:
@@ -245,12 +242,18 @@ class CF_Org(object):
             description = info
         self.module.fail_json(msg='Failed: %s' % action, status=info['status'], error_description=description)
 
+    def msg(self, m):
+        self.result['msg'].append(m)
+
+    def diff(self, old_value, new_value):
+        self.result['diff'].append({'before': old_value + '\n', 'after': new_value + '\n'})
+
 def main():
     module = AnsibleModule(
         argument_spec       = dict(
             state           = dict(default='present', type='str', choices=['present', 'absent']),
             name            = dict(required=True, type='str', aliases=['id']),
-            admin_user      = dict(required=True, type='str'),
+            admin_user      = dict(required=True, type='str', no_log=True),
             admin_password  = dict(required=True, type='str', no_log=True),
             domain          = dict(type='str'),
             protocol        = dict(default='https', type='str', choices=['http', 'https']),
